@@ -1,0 +1,290 @@
+openapi: 3.0.3
+info:
+  title: DDW Leak Intelligence API
+  version: "1.0.1"
+  description: |
+    This API searches Deep and Dark Web (DDW) sources for possible data-leak indicators
+    related to a specific company or domain.
+    The response may omit `overall_summary` to allow Security Copilot to generate
+    a summary from `results` data.
+
+servers:
+  - url: https://api.example.com/ddw-intel
+
+tags:
+  - name: Leaks
+    description: Search and retrieve DDW leak intelligence
+  - name: Indicators
+    description: Retrieve leaked indicators related to a domain
+
+paths:
+  /leaks:
+    get:
+      tags: [Leaks]
+      summary: Search DDW for company or domain-related leak indications
+      description: |
+        Searches DDW posts and marketplaces using `company_name` or `domain`.
+        Response includes a branch classification to guide Copilot behavior.
+
+        ### Branch Logic
+        • A – Direct match (explicit company mention)  
+        • B – Indirect match (industry/country similarity)  
+        • C – No indications
+
+        ### Example Prompts
+        - "Has there been any detected instance of data leaks related to our company on the DDW recently?"
+        - "Check for any indications of data leaks related to the domain example.com."
+      parameters:
+        - in: query
+          name: company_name
+          schema: { type: string }
+          description: Company name to search for (e.g., "XXX")
+        - in: query
+          name: domain
+          schema: { type: string, format: hostname }
+          description: Domain to search for (e.g., "example.com")
+        - in: query
+          name: since
+          schema: { type: string, format: date }
+          description: Retrieve posts newer than the specified date (YYYY-MM-DD)
+        - in: query
+          name: limit
+          schema: { type: integer, default: 10, minimum: 1, maximum: 50 }
+          description: Maximum number of results to return
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Leak search results with branch classification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeakSearchResponse"
+              examples:
+                BranchA:
+                  summary: Direct match found (omits overall_summary so Copilot summarizes)
+                  value:
+                    branch_label: "A"
+                    results:
+                      - id: "ddd-2024-12-19-001"
+                        source: "DDD Forum"
+                        first_seen: "2024-12-19"
+                        title: "VPN access to XXX"
+                        price_btc: "0.00"
+                        match_type: "direct"
+                        evidence:
+                          - "company_name_explicit: true"
+                          - "proof_screenshot: present"
+                BranchB:
+                  summary: Indirect match only (omits overall_summary)
+                  value:
+                    branch_label: "B"
+                    results:
+                      - id: "ddd-2024-12-19-002"
+                        source: "DDD Forum"
+                        first_seen: "2024-12-19"
+                        title: "KR IT service company customer DB"
+                        price_btc: "0.00"
+                        match_type: "indirect"
+                        evidence:
+                          - "country: KR"
+                          - "industry: IT Services"
+                          - "schema_disclosed: true"
+                BranchC:
+                  summary: No indications (omits overall_summary)
+                  value:
+                    branch_label: "C"
+                    results: []
+        "400":
+          description: Invalid parameters
+        "401":
+          description: Unauthorized – invalid or expired token
+
+  /leaks/{id}:
+    get:
+      tags: [Leaks]
+      summary: Retrieve detailed information about a specific DDW leak
+      description: |
+        Returns detailed information for a specific DDW post or marketplace listing,
+        including pricing, proof, and attacker contact method.
+
+        ### Example Prompt
+        - "Provide detailed information regarding the detected leak."
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+          description: Leak post identifier from `/leaks` results
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Leak detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeakDetail"
+              examples:
+                BranchA_Detail:
+                  summary: VPN account sale
+                  value:
+                    id: "ddd-2024-12-19-001"
+                    source: "DDD Forum"
+                    first_seen: "2024-12-19"
+                    match_type: "direct"
+                    branch_label: "A"
+                    summary: "Attacker selling valid VPN credentials for XXX, proof screenshot attached, 00 BTC."
+                    price_btc: "0.00"
+                    proof:
+                      screenshot_present: true
+                      proof_notes: "Login panel screenshot shown."
+                    contact:
+                      method: "Direct Message"
+                      handle: "seller_abc"
+                BranchB_Detail:
+                  summary: Customer database sale
+                  value:
+                    id: "ddd-2024-12-19-002"
+                    source: "DDD Forum"
+                    first_seen: "2024-12-19"
+                    match_type: "indirect"
+                    branch_label: "B"
+                    summary: "Database from KR IT service company for sale; schema disclosed; 00 BTC."
+                    price_btc: "0.00"
+                    data_schema_preview:
+                      - "customers(id, name, phone, email, created_at)"
+                      - "orders(id, customer_id, amount, status)"
+                    contact:
+                      method: "Direct Message"
+                      handle: "seller_xyz"
+        "404":
+          description: Leak ID not found
+
+  /indicators/by-domain:
+    get:
+      tags: [Indicators]
+      summary: Retrieve cross-source leaked indicators by domain
+      description: |
+        Returns leaked credentials, stealer logs, or Telegram leak mentions
+        associated with the specified domain.  
+        Commonly used when branch C (no direct DDW matches) occurs.
+
+        ### Example Prompt
+        - "Check for any indications of data leaks related to the domain example.com."
+      parameters:
+        - in: query
+          name: domain
+          required: true
+          schema: { type: string, format: hostname }
+          description: Target domain (e.g., "example.com")
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Domain-related indicators found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DomainIndicatorsResponse"
+              examples:
+                DomainExample:
+                  summary: Latest domain leak trace
+                  value:
+                    domain: "example.com"
+                    last_seen: "2025-01-10"
+                    sources:
+                      - type: "stealer-dump"
+                        platform: "Telegram"
+                        note: "Credentials exfiltrated via stealer malware uploaded to Telegram."
+                        first_seen: "2025-01-10"
+                    related_accounts:
+                      - "user1@example.com"
+                      - "it-admin@example.com"
+        "404":
+          description: No indicators found
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LeakSearchResponse:
+      type: object
+      properties:
+        branch_label:
+          type: string
+          enum: [A, B, C]
+          description: Detection branch classification
+        overall_summary:
+          type: string
+          nullable: true
+          description: "Optional field. If omitted or null, Copilot will infer a summary based on results."
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeakSummary"
+      required:
+        - branch_label
+        - results
+
+    LeakSummary:
+      type: object
+      properties:
+        id: { type: string }
+        source: { type: string }
+        first_seen: { type: string, format: date }
+        title: { type: string }
+        price_btc: { type: string, nullable: true }
+        match_type: { type: string, enum: [direct, indirect] }
+        evidence:
+          type: array
+          items: { type: string }
+
+    LeakDetail:
+      type: object
+      properties:
+        id: { type: string }
+        source: { type: string }
+        first_seen: { type: string, format: date }
+        match_type: { type: string, enum: [direct, indirect] }
+        branch_label: { type: string, enum: [A, B] }
+        summary: { type: string }
+        price_btc: { type: string, nullable: true }
+        proof:
+          type: object
+          nullable: true
+          properties:
+            screenshot_present: { type: boolean }
+            proof_notes: { type: string, nullable: true }
+        contact:
+          type: object
+          nullable: true
+          properties:
+            method: { type: string }
+            handle: { type: string }
+        data_schema_preview:
+          type: array
+          nullable: true
+          items: { type: string }
+
+    DomainIndicatorsResponse:
+      type: object
+      properties:
+        domain: { type: string, format: hostname }
+        last_seen: { type: string, format: date, nullable: true }
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              type: { type: string }
+              platform: { type: string, nullable: true }
+              note: { type: string, nullable: true }
+              first_seen: { type: string, format: date, nullable: true }
+        related_accounts:
+          type: array
+          items: { type: string }
