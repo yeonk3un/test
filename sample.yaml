@@ -9,7 +9,7 @@ info:
     a summary from `results` data.
 
 servers:
-  - url: https://api.example.com/ddw-intel
+  - url: https://api.quaxar.io/experimental/copilot
 
 tags:
   - name: Leaks
