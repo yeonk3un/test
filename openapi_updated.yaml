@@ -1,0 +1,757 @@
+openapi: 3.0.3
+info:
+  title: DDW Leak Intelligence API
+  version: 1.2.0
+  description: 'Deep & Dark Web (DDW) intelligence for company/domain leak checks,
+
+    ransomware incidents, ransomware group info/response measures,
+
+    DDW vulnerability trends (incl. Ivanti), leak tie checks, and key user profiling.
+
+    `overall_summary` may be omitted so the assistant summarizes from `results`.
+
+    '
+servers:
+- url: <DELTED>
+tags:
+- name: Leaks
+  description: Search and retrieve DDW leak intelligence
+- name: Indicators
+  description: Retrieve domain-related leaked indicators
+- name: Ransomware
+  description: Ransomware incidents and groups
+- name: Trends
+  description: DDW vulnerability trends and zero-days
+- name: Users
+  description: Key DDW user profiling
+paths:
+  /leaks:
+    get:
+      operationId: SearchDDWLeaks
+      tags:
+      - Leaks
+      summary: Search DDW (Deep & Dark Web) for company/domain leak indicators
+      description: "Searches DDW posts/markets using `company_name` or `domain`.\n\
+        Branch logic:\n  A - direct match, B - indirect, C - no indications.\n"
+      parameters:
+      - in: query
+        name: company_name
+        schema:
+          type: string
+        description: Company name (e.g., "XXX")
+      - in: query
+        name: domain
+        schema:
+          type: string
+          format: hostname
+        description: Domain (e.g., "example.com")
+      - in: query
+        name: since
+        schema:
+          type: string
+          format: date
+        description: Only posts newer than YYYY-MM-DD
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+        description: Max number of results
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Leak search results with branch classification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeakSearchResponse'
+        '400':
+          description: Invalid parameters
+        '401':
+          description: Unauthorized
+  /leaks/{id}:
+    get:
+      operationId: GetLeakDetail
+      tags:
+      - Leaks
+      summary: Retrieve detailed information about a specific DDW leak
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Leak id from /leaks results
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Leak detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeakDetail'
+        '404':
+          description: Leak ID not found
+  /indicators/by-domain:
+    get:
+      operationId: DomainLeakIndicators
+      tags:
+      - Indicators
+      summary: Retrieve cross-source leaked indicators by domain
+      parameters:
+      - in: query
+        name: domain
+        required: true
+        schema:
+          type: string
+          format: hostname
+        description: Target domain (e.g., "example.com")
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Domain-related indicators
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainIndicatorsResponse'
+        '404':
+          description: No indicators found
+  /ransomware/incidents:
+    get:
+      operationId: SearchRansomwareIncidents
+      tags:
+      - Ransomware
+      summary: Search ransomware incidents related to a company
+      description: "Branch logic:\n  A - direct infection of the target company,\n\
+        \  B - related company infected (possible ties),\n  C - no direct/indirect\
+        \ infections; return recent counts.\n"
+      parameters:
+      - in: query
+        name: company_name
+        required: true
+        schema:
+          type: string
+        description: Target company name (e.g., "XXX")
+      - in: query
+        name: since
+        schema:
+          type: string
+          format: date
+        description: Only incidents newer than YYYY-MM-DD
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Ransomware incident search results (branch A/B/C)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RansomwareIncidentSearchResponse'
+        '400':
+          description: Invalid parameters
+        '401':
+          description: Unauthorized
+  /ransomware/incidents/{id}/related-to:
+    get:
+      operationId: CheckIncidentRelatedContent
+      tags:
+      - Ransomware
+      summary: Check whether a specific incident's leaked data contains a given company
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Incident id from /ransomware/incidents results
+      - in: query
+        name: company_name
+        required: true
+        schema:
+          type: string
+        description: Company name to check (e.g., "XXX")
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Related-content check result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncidentRelatedCheckResponse'
+        '404':
+          description: Incident not found
+  /ransomware/groups/{group_name}:
+    get:
+      operationId: GetRansomwareGroupInfo
+      tags:
+      - Ransomware
+      summary: Get ransomware group information and response measures
+      parameters:
+      - in: path
+        name: group_name
+        required: true
+        schema:
+          type: string
+        description: Ransomware group name (e.g., "RRR")
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Ransomware group details and response measures
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RansomwareGroupDetail'
+        '404':
+          description: Group not found
+  /ransomware/incidents/{id}/access-request:
+    post:
+      operationId: RequestIncidentDataAccess
+      tags:
+      - Ransomware
+      summary: Request policy-aware access to leaked data for a specific incident
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+        description: Incident id
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Access request policy result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessPolicyResponse'
+        '404':
+          description: Incident not found
+  /ddw/vulns/trending:
+    get:
+      operationId: GetTrendingVulnerabilities
+      tags:
+      - Trends
+      summary: Most frequently mentioned vulnerabilities in DDW (period)
+      parameters:
+      - in: query
+        name: period
+        schema:
+          type: string
+          default: 90d
+        description: Period window (e.g., "90d", "30d")
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Trending vulnerability statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrendingVulnsResponse'
+  /ddw/vulns/ivanti:
+    get:
+      operationId: GetIvantiZeroDayStats
+      tags:
+      - Trends
+      summary: Ivanti-related zero-day mentions and stats in DDW
+      parameters:
+      - in: query
+        name: period
+        schema:
+          type: string
+          default: 90d
+        description: Period window (e.g., "90d")
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Ivanti-related posts and zero-day stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IvantiStatsResponse'
+  /ddw/vulns/leaks-related:
+    get:
+      operationId: CheckVulnLeakTies
+      tags:
+      - Trends
+      summary: Check whether data leaks explicitly reference these vulnerabilities
+      parameters:
+      - in: query
+        name: product
+        required: false
+        schema:
+          type: string
+        description: Product filter (e.g., "Ivanti")
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Leak ties to vulnerabilities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VulnLeaksRelatedResponse'
+  /ddw/users/key:
+    get:
+      operationId: GetKeyUsers
+      tags:
+      - Users
+      summary: Retrieve key DDW users related to a product or vulnerability topic
+      parameters:
+      - in: query
+        name: related_to
+        required: false
+        schema:
+          type: string
+        description: Topic/product filter (e.g., "Ivanti")
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Key DDW users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeyUsersResponse'
+  /ddw/users/{username}:
+    get:
+      operationId: GetUserProfile
+      tags:
+      - Users
+      summary: Get a specific DDW user's profile and activity stats
+      parameters:
+      - in: path
+        name: username
+        required: true
+        schema:
+          type: string
+        description: DDW username/handle
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: DDW user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DDWUserDetail'
+        '404':
+          description: User not found
+  /leaks/search:
+    post:
+      operationId: SearchDDWLeaksV2
+      tags:
+      - Leaks
+      summary: Search DDW (Deep & Dark Web) for company/domain leak indicators (body)
+      description: "Searches DDW posts/markets using `company_name` or `domain`.\n\
+        This endpoint is optimized for agent/tool calling because it enforces that\
+        \ at least one target is provided.\nBranch logic:\n  A - direct match, B -\
+        \ indirect, C - no indications.\n"
+      security:
+      - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                company_name:
+                  type: string
+                  description: Company name (e.g., "XXX")
+                domain:
+                  type: string
+                  format: hostname
+                  description: Domain (e.g., "example.com")
+                since:
+                  type: string
+                  format: date
+                  description: Only posts newer than YYYY-MM-DD
+                limit:
+                  type: integer
+                  default: 10
+                  minimum: 1
+                  maximum: 50
+                  description: Max number of results
+              anyOf:
+              - required:
+                - company_name
+              - required:
+                - domain
+            examples:
+              byDomain:
+                value:
+                  domain: example.com
+                  since: '2025-12-01'
+                  limit: 10
+              byCompany:
+                value:
+                  company_name: XXX
+                  limit: 10
+      responses:
+        '200':
+          description: Leak search results with branch classification
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeakSearchResponse'
+        '400':
+          description: Invalid parameters
+        '401':
+          description: Unauthorized
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    LeakSearchResponse:
+      type: object
+      properties:
+        branch_label:
+          type: string
+          enum:
+          - A
+          - B
+          - C
+        overall_summary:
+          type: string
+          nullable: true
+          description: Optional; if omitted, the assistant summarizes from results.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeakSummary'
+        result_count:
+          type: integer
+          minimum: 0
+          description: Number of items in results
+        match_type:
+          type: string
+          enum:
+          - DIRECT
+          - INDIRECT
+          - NONE
+          description: Explicit match interpretation derived from branch_label (A->DIRECT,
+            B->INDIRECT, C->NONE).
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          nullable: true
+          description: Optional confidence score (0~1).
+      required:
+      - branch_label
+      - results
+    LeakSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        first_seen:
+          type: string
+          format: date
+        title:
+          type: string
+        price_btc:
+          type: string
+          nullable: true
+        match_type:
+          type: string
+          enum:
+          - direct
+          - indirect
+        evidence:
+          type: array
+          items:
+            type: string
+    LeakDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        first_seen:
+          type: string
+          format: date
+        match_type:
+          type: string
+          enum:
+          - direct
+          - indirect
+        branch_label:
+          type: string
+          enum:
+          - A
+          - B
+        summary:
+          type: string
+        price_btc:
+          type: string
+          nullable: true
+        proof:
+          type: object
+          nullable: true
+          properties:
+            screenshot_present:
+              type: boolean
+            proof_notes:
+              type: string
+              nullable: true
+        contact:
+          type: object
+          nullable: true
+          properties:
+            method:
+              type: string
+            handle:
+              type: string
+        data_schema_preview:
+          type: array
+          nullable: true
+          items:
+            type: string
+    DomainIndicatorsResponse:
+      type: object
+      properties:
+        domain:
+          type: string
+          format: hostname
+        last_seen:
+          type: string
+          format: date
+          nullable: true
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              platform:
+                type: string
+                nullable: true
+              note:
+                type: string
+                nullable: true
+              first_seen:
+                type: string
+                format: date
+                nullable: true
+        related_accounts:
+          type: array
+          items:
+            type: string
+    RansomwareIncidentSearchResponse:
+      type: object
+      properties:
+        branch_label:
+          type: string
+          enum:
+          - A
+          - B
+          - C
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RansomwareIncidentSummary'
+        stats:
+          type: object
+          nullable: true
+          description: Used for branch C (recent counts)
+          properties:
+            recent_kr_companies:
+              type: integer
+              nullable: true
+            recent_global_it_companies:
+              type: integer
+              nullable: true
+      required:
+      - branch_label
+      - results
+    RansomwareIncidentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        company:
+          type: string
+        group:
+          type: string
+        first_seen:
+          type: string
+          format: date
+        disclosure_date:
+          type: string
+          format: date
+          nullable: true
+        proof_screenshots:
+          type: boolean
+          nullable: true
+        relation_note:
+          type: string
+          nullable: true
+    IncidentRelatedCheckResponse:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        company_checked:
+          type: string
+        contains_related_info:
+          type: boolean
+        dataset_size_tb:
+          type: number
+          format: float
+          nullable: true
+        file_count:
+          type: integer
+          nullable: true
+        note:
+          type: string
+          nullable: true
+    RansomwareGroupDetail:
+      type: object
+      properties:
+        name:
+          type: string
+        first_identified:
+          type: string
+          format: date
+          nullable: true
+        latest_confirmed_leak:
+          type: string
+          format: date
+          nullable: true
+        primary_attack_methods:
+          type: array
+          items:
+            type: string
+        exploited_cves:
+          type: array
+          items:
+            type: string
+        ttp_notes:
+          type: string
+          nullable: true
+    AccessPolicyResponse:
+      type: object
+      properties:
+        incident_id:
+          type: string
+        ownership_verification_required:
+          type: boolean
+        policy_message:
+          type: string
+    TrendingVulnsResponse:
+      type: object
+      properties:
+        period_days:
+          type: integer
+        average_cvss:
+          type: number
+          format: float
+        min_cvss:
+          type: number
+          format: float
+        max_cvss:
+          type: number
+          format: float
+        top_products:
+          type: array
+          items:
+            type: string
+        top_categories:
+          type: array
+          items:
+            type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product:
+                type: string
+              cve:
+                type: string
+                nullable: true
+              mentions:
+                type: integer
+    IvantiStatsResponse:
+      type: object
+      properties:
+        period_days:
+          type: integer
+        posts_total:
+          type: integer
+        posts_vuln:
+          type: integer
+        posts_zero_day:
+          type: integer
+        buy_zero_day_posts:
+          type: integer
+        sell_zero_day_posts:
+          type: integer
+    VulnLeaksRelatedResponse:
+      type: object
+      properties:
+        product:
+          type: string
+          nullable: true
+        explicit_leaks_found:
+          type: boolean
+        note:
+          type: string
+          nullable: true
+        risky_users:
+          type: array
+          items:
+            type: string
+    KeyUsersResponse:
+      type: object
+      properties:
+        related_to:
+          type: string
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DDWUserDetail'
+    DDWUserDetail:
+      type: object
+      properties:
+        username:
+          type: string
+        first_seen:
+          type: string
+          format: date
+          nullable: true
+        posts_total:
+          type: integer
+          nullable: true
+        sell_leaks_ratio:
+          type: number
+          format: float
+          nullable: true
+        kr_related_ratio:
+          type: number
+          format: float
+          nullable: true
+        suspected_origin:
+          type: string
+          nullable: true
